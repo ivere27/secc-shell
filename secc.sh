@@ -25,7 +25,7 @@ fi
 
 
 COMPILER_PATH=$0
-ARGV=$@
+ARGV=$(printf '%q ' $@)  # preserve double quotes. ex, -DMMM=\"ABC\"
 COMPILER=${COMPILER_PATH##*/}
 RANDOM_STRING=$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM
 PREPROCESSED_SOURCE_PATH="${TMPDIR}/secc-${RANDOM_STRING:0:5}"
@@ -37,7 +37,7 @@ OUTPUT_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_header.txt
 
 log()
 {
-  read INPUT
+  read -r INPUT
   echo "[$$] $INPUT $1" >> ${SECC_LOG}
 }
 
@@ -76,11 +76,12 @@ echo "--- SECC START --- "$(date) | log
 [[ -z "$SCHEDULER_PORT" ]] && passThrough "no SCHEDULER_PORT"
 
 #echo $COMPILER_PATH
-
 argv='['
 for arg in $@
 do
-  argv+='"'${arg//\"/\\\"}'", '
+  arg=${arg//\\/\\\\} # \
+  arg=${arg//\"/\\\"} # "
+  argv+='"'${arg}'", '
 done
 argv=${argv/%, /}
 argv+=']'
@@ -207,7 +208,7 @@ JOB_errorMessage=$(echo "$JOB" | grep "error/message=" | awk -F"error/message=" 
 # OPTION_remoteArgv to comma seperated string
 for arg in ${OPTION_remoteArgv[@]}
 do
-  SECC_ARGV+="$arg,"
+  SECC_ARGV+="\"$arg\","
 done
 SECC_ARGV=${SECC_ARGV/%,/}
 #echo $SECC_ARGV
