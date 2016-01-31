@@ -1,19 +1,26 @@
 #!/bin/bash
 ############################################################
 ##                                                        ##
-##                SECC Shell Frontend - 0.0.1             ##
+##                SECC Shell Frontend - 0.0.2             ##
 ##                                                        ##
 ############################################################
 
-#### user settings or ENV. 
-#SCHEDULER_HOST="172.17.42.1"
-#SCHEDULER_PORT="10509"
-#SECC_CROSS="true"
+# ### user settings or ENV.
+# SCHEDULER_HOST="172.17.42.1"
+# SCHEDULER_PORT="10509"
 
+# # debug
+# DEBUG="*"
+# SECC_LOG="/tmp/secc.log"
+# SECC_CMDLINE=1
+
+# # mode
+# SECC_CROSS="false"
+# #SECC_MODE="1"      # FIXME : need to implement MODE 2
+# #SECC_CACHE=0       # FIXME : need to implement downloading CACHEs
 
 
 #default settings
-
 [[ -z $SECC_MODE ]] && SECC_MODE="1"
 [[ -z $SECC_CROSS ]] && SECC_CROSS="false"
 if [[ -n $DEBUG ]] ; then
@@ -53,7 +60,7 @@ deleteTempFiles()
 
 passThrough()
 {
-  echo "passThrough - $@" | log
+  echo "passThrough - ${ARGV}" | log
   deleteTempFiles
   eval "/usr/bin/${COMPILER} ${ARGV}"
   EXIT_CODE=$?
@@ -77,7 +84,7 @@ echo "--- SECC START --- "$(date) | log
 
 #echo $COMPILER_PATH
 argv='['
-for arg in $@
+for arg in "$@"
 do
   arg=${arg//\\/\\\\} # \
   arg=${arg//\"/\\\"} # "
