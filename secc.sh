@@ -32,7 +32,7 @@ fi
 
 
 COMPILER_PATH=$0
-ARGV=$(printf '%q ' $@)  # preserve double quotes. ex, -DMMM=\"ABC\"
+ARGV=$(printf '%q ' "$@")  # preserve double quotes. ex, -DMMM=\"ABC\"
 COMPILER=${COMPILER_PATH##*/}
 RANDOM_STRING=$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM
 PREPROCESSED_SOURCE_PATH="${TMPDIR}/secc-${RANDOM_STRING:0:5}"
