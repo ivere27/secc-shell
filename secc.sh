@@ -1,7 +1,7 @@
 #!/bin/bash
 ############################################################
 ##                                                        ##
-##                SECC Shell Frontend - 0.0.2             ##
+##                SECC Shell Frontend - 0.0.3             ##
 ##                                                        ##
 ############################################################
 
@@ -12,7 +12,7 @@
 # # debug
 # DEBUG="*"
 # SECC_LOG="/tmp/secc.log"
-# SECC_CMDLINE=1
+# SECC_CMDLINE=0
 
 # # mode
 # SECC_CROSS="false"
@@ -34,13 +34,16 @@ fi
 COMPILER_PATH=$0
 ARGV=$(printf '%q ' "$@")  # preserve double quotes. ex, -DMMM=\"ABC\"
 COMPILER=${COMPILER_PATH##*/}
+RANDOM=$$                  # seed from PID
 RANDOM_STRING=$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM
 PREPROCESSED_SOURCE_PATH="${TMPDIR}/secc-${RANDOM_STRING:0:5}"
 PREPROCESSED_GZIP_PATH=${PREPROCESSED_SOURCE_PATH}_in.gz
 OUTPUT_TAR_PATH=${PREPROCESSED_SOURCE_PATH}_out.tar
 OPTION_ANALYZE_PATH=${PREPROCESSED_SOURCE_PATH}_option.txt
 JOB_PATH=${PREPROCESSED_SOURCE_PATH}_job.txt
-OUTPUT_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_header.txt
+OPTION_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_option_header.txt
+JOB_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_job_header.txt
+COMPILE_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_compile_header.txt
 
 log()
 {
@@ -55,12 +58,14 @@ deleteTempFiles()
   rm -rf ${OUTPUT_TAR_PATH}          > /dev/null 2>&1
   rm -rf ${OPTION_ANALYZE_PATH}      > /dev/null 2>&1
   rm -rf ${JOB_PATH}                 > /dev/null 2>&1
-  rm -rf ${OUTPUT_HEADER_PATH}       > /dev/null 2>&1
+  rm -rf ${OPTION_HEADER_PATH}       > /dev/null 2>&1
+  rm -rf ${JOB_HEADER_PATH}          > /dev/null 2>&1
+  rm -rf ${COMPILE_HEADER_PATH}      > /dev/null 2>&1
 }
 
 passThrough()
 {
-  echo "passThrough - ${ARGV}" | log
+  echo "passThrough : $1" | log
   deleteTempFiles
   eval "/usr/bin/${COMPILER} ${ARGV}"
   EXIT_CODE=$?
@@ -75,23 +80,26 @@ printCommand()
 }
 
 echo "--- SECC START --- "$(date) | log
-[[ -n "$SECC_CMDLINE" ]] && printCommand
+[[ "$SECC_CMDLINE" = true ]] && printCommand
 
 ## basic checks
 [[ -z "$1" ]] && passThrough "no arguments"
 [[ -z "$SCHEDULER_HOST" ]] && passThrough "no SCHEDULER_HOST"
 [[ -z "$SCHEDULER_PORT" ]] && passThrough "no SCHEDULER_PORT"
+[[ $PWD == *"/CMakeFiles/"* ]] && passThrough "in CMakeFiles"   # //always passThrough in CMakeFiles 
 
-#echo $COMPILER_PATH
+OPTION_C_EXISTS="0"
 argv='['
 for arg in "$@"
 do
+  [[ $arg == "-c" ]] && OPTION_C_EXISTS="1";
   arg=${arg//\\/\\\\} # \
   arg=${arg//\"/\\\"} # "
   argv+='"'${arg}'", '
 done
 argv=${argv/%, /}
 argv+=']'
+[[ $OPTION_C_EXISTS == "0" ]] && passThrough "-c not exists"
 
 
 data='{"compiler":"'${COMPILER}'"
@@ -109,13 +117,15 @@ COMMAND="curl --verbose \
 http://$SCHEDULER_HOST:$SCHEDULER_PORT/option/analyze \
 -d '${data}' \
 -o '${OPTION_ANALYZE_PATH}' \
---dump-header '${OUTPUT_HEADER_PATH}' \
+--dump-header '${OPTION_HEADER_PATH}' \
 --noproxy ${SCHEDULER_HOST}"
 
 echo $COMMAND | log
 eval $COMMAND 2>> ${SECC_LOG}
 [[ $? != 0 ]] && passThrough "error on SCHEDULER/option/analyze"
-OUTPUT_HEADER_STATUS=$(cat "$OUTPUT_HEADER_PATH" | grep "HTTP/1.1 200 OK")
+HEADER=$(cat ${OPTION_HEADER_PATH} 2> /dev/null)
+[[ $? != 0 ]] && passThrough "error on SCHEDULER/option/analyze header"     # No such file or directory
+OUTPUT_HEADER_STATUS=$(echo "$HEADER" | grep "HTTP/1.1 200 OK")
 [[ -z "$OUTPUT_HEADER_STATUS" ]] && passThrough "bad code on SCHEDULER/option/analyze"
 
 
@@ -185,12 +195,15 @@ COMMAND="curl --verbose \
 http://$SCHEDULER_HOST:$SCHEDULER_PORT/job/new \
 -d '$data' \
 -o '${JOB_PATH}' \
---dump-header '${OUTPUT_HEADER_PATH}' \
+--dump-header '${JOB_HEADER_PATH}' \
 --noproxy ${SCHEDULER_HOST}"
 
 echo $COMMAND | log
 eval $COMMAND 2>> ${SECC_LOG}
-OUTPUT_HEADER_STATUS=$(cat "$OUTPUT_HEADER_PATH" | grep "HTTP/1.1 200 OK")
+
+HEADER=$(cat ${JOB_HEADER_PATH} 2> /dev/null)
+[[ $? != 0 ]] && passThrough "error on SCHEDULER/job/new header"     # No such file or directory
+OUTPUT_HEADER_STATUS=$(echo "$HEADER" | grep "HTTP/1.1 200 OK")
 [[ -z "$OUTPUT_HEADER_STATUS" ]] && passThrough "error on DAEMON's compilation(not 200)"
 
 JOB=$(cat ${JOB_PATH})
@@ -232,6 +245,7 @@ SOURCE_NAME=${SOURCE_NAME%.*}
 COMMAND="curl --verbose \
 -X POST \
 --max-time 60 \
+--compressed \
 -H Content-Encoding:'gzip' \
 -H secc-jobid:'${JOB_jobId}' \
 -H secc-compiler:'${COMPILER}' \
@@ -242,7 +256,7 @@ COMMAND="curl --verbose \
 -H secc-target:'${COMPILER_DUMPMACHINE}' \
 -T '${PREPROCESSED_GZIP_PATH}' \
 -o '${OUTPUT_TAR_PATH}' \
---dump-header '${OUTPUT_HEADER_PATH}' \
+--dump-header '${COMPILE_HEADER_PATH}' \
 http://${JOB_daemonAddress}:${JOB_daemonPort}/compile/preprocessed/${JOB_archiveId} \
 --noproxy ${SCHEDULER_HOST}"
 
@@ -250,7 +264,9 @@ echo $COMMAND | log
 eval $COMMAND 2>> ${SECC_LOG}
 [[ $? != 0 ]] && passThrough "error on DAEMON/compile/preprocessed/${JOB_archiveId}"
 
-OUTPUT_HEADER=$(cat ${OUTPUT_HEADER_PATH})
+OUTPUT_HEADER=$(cat ${COMPILE_HEADER_PATH} 2> /dev/null)
+[[ $? != 0 ]] && passThrough "error on DAEMON/compile/preprocessed/${JOB_archiveId} header" # No such file or directory
+
 OUTPUT_HEADER_SECC_CODE=$(echo "$OUTPUT_HEADER" | grep "secc-code:" | sed -e "s/secc-code://")
 OUTPUT_HEADER_SECC_STDOUT=$(echo "$OUTPUT_HEADER" | grep "secc-stdout:" | sed -e "s/secc-stdout://")
 OUTPUT_HEADER_SECC_STDERR=$(echo "$OUTPUT_HEADER" | grep "secc-stderr:" | sed -e "s/secc-stderr://")
@@ -277,7 +293,6 @@ eval $COMMAND
 # echo ${PREPROCESSED_SOURCE_PATH}
 # echo ${PREPROCESSED_GZIP_PATH}
 # echo ${OUTPUT_TAR_PATH}
-# echo $$OUTPUT_HEADER_PATH}
 
 # clean up
 deleteTempFiles
