@@ -1,7 +1,7 @@
 #!/bin/bash
 ############################################################
 ##                                                        ##
-##                SECC Shell Frontend - 0.0.3             ##
+##                SECC Shell Frontend - 0.0.4             ##
 ##                                                        ##
 ############################################################
 
@@ -44,6 +44,7 @@ JOB_PATH=${PREPROCESSED_SOURCE_PATH}_job.txt
 OPTION_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_option_header.txt
 JOB_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_job_header.txt
 COMPILE_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_compile_header.txt
+CURL_LOG_FORMAT="[$$] code:%{http_code} type:%{content_type} upload:%{size_upload}/%{speed_upload} download:%{size_download}/%{speed_download} time:%{time_total} file:%{filename_effective}\n"
 
 log()
 {
@@ -109,7 +110,7 @@ data='{"compiler":"'${COMPILER}'"
 #echo $data
 
 #--silent | --verbose
-COMMAND="curl --verbose \
+COMMAND="curl \
 --max-time 10 \
 -X POST \
 -H 'Content-Type: application/json' \
@@ -118,10 +119,11 @@ http://$SCHEDULER_HOST:$SCHEDULER_PORT/option/analyze \
 -d '${data}' \
 -o '${OPTION_ANALYZE_PATH}' \
 --dump-header '${OPTION_HEADER_PATH}' \
---noproxy ${SCHEDULER_HOST}"
+--noproxy ${SCHEDULER_HOST} \
+--write-out '${CURL_LOG_FORMAT}'"
 
 echo $COMMAND | log
-eval $COMMAND 2>> ${SECC_LOG}
+eval $COMMAND 1>> ${SECC_LOG} 2> /dev/null
 [[ $? != 0 ]] && passThrough "error on SCHEDULER/option/analyze"
 HEADER=$(cat ${OPTION_HEADER_PATH} 2> /dev/null)
 [[ $? != 0 ]] && passThrough "error on SCHEDULER/option/analyze header"     # No such file or directory
@@ -188,7 +190,7 @@ data='{
 }'
 
 #--silent
-COMMAND="curl --verbose \
+COMMAND="curl \
 -X POST \
 -H 'Content-Type: application/json' \
 -H 'Accept: text/plain' \
@@ -196,10 +198,11 @@ http://$SCHEDULER_HOST:$SCHEDULER_PORT/job/new \
 -d '$data' \
 -o '${JOB_PATH}' \
 --dump-header '${JOB_HEADER_PATH}' \
---noproxy ${SCHEDULER_HOST}"
+--noproxy ${SCHEDULER_HOST} \
+--write-out '${CURL_LOG_FORMAT}'"
 
 echo $COMMAND | log
-eval $COMMAND 2>> ${SECC_LOG}
+eval $COMMAND 1>> ${SECC_LOG} 2> /dev/null
 
 HEADER=$(cat ${JOB_HEADER_PATH} 2> /dev/null)
 [[ $? != 0 ]] && passThrough "error on SCHEDULER/job/new header"     # No such file or directory
@@ -242,7 +245,7 @@ SOURCE_NAME=${SOURCE_NAME%.*}
 
 
 # request Compilation to Daemon --silent
-COMMAND="curl --verbose \
+COMMAND="curl \
 -X POST \
 --max-time 60 \
 --compressed \
@@ -258,10 +261,11 @@ COMMAND="curl --verbose \
 -o '${OUTPUT_TAR_PATH}' \
 --dump-header '${COMPILE_HEADER_PATH}' \
 http://${JOB_daemonAddress}:${JOB_daemonPort}/compile/preprocessed/${JOB_archiveId} \
---noproxy ${SCHEDULER_HOST}"
+--noproxy ${SCHEDULER_HOST} \
+--write-out '${CURL_LOG_FORMAT}'"
 
 echo $COMMAND | log
-eval $COMMAND 2>> ${SECC_LOG}
+eval $COMMAND 1>> ${SECC_LOG} 2> /dev/null
 [[ $? != 0 ]] && passThrough "error on DAEMON/compile/preprocessed/${JOB_archiveId}"
 
 OUTPUT_HEADER=$(cat ${COMPILE_HEADER_PATH} 2> /dev/null)
@@ -296,3 +300,5 @@ eval $COMMAND
 
 # clean up
 deleteTempFiles
+
+echo "--- SECC END --- " | log
