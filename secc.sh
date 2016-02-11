@@ -1,7 +1,7 @@
 #!/bin/bash
 ############################################################
 ##                                                        ##
-##                SECC Shell Frontend - 0.0.4             ##
+##                SECC Shell Frontend - 0.0.5             ##
 ##                                                        ##
 ############################################################
 
@@ -15,21 +15,36 @@
 # SECC_CMDLINE=0
 
 # # mode
-# SECC_CROSS="false"
+# SECC_CROSS=0
+# SECC_CACHE=1
 # #SECC_MODE="1"      # FIXME : need to implement MODE 2
-# #SECC_CACHE=0       # FIXME : need to implement downloading CACHEs
-
 
 #default settings
-[[ -z $SECC_MODE ]] && SECC_MODE="1"
-[[ -z $SECC_CROSS ]] && SECC_CROSS="false"
+[[ -z $SECC_CROSS ]] && SECC_CROSS="0"  # default CROSS = FALSE
+[[ -z $SECC_CACHE ]] && SECC_CACHE="1"  # default CACHE = TRUE
+[[ -z $SECC_MODE ]] && SECC_MODE="1"    # default MODE  = 1 preprocessed
+[[ -z $TMPDIR ]] && TMPDIR="/tmp"
+
+if [[ $SECC_CROSS == "1" ]] ; then
+  SECC_CROSS="true"
+else
+  SECC_CROSS="false"
+fi
+if [[ $SECC_CACHE == "1" ]] ; then
+  SECC_CACHE="true"
+else
+  SECC_CACHE="false"
+fi
+if [[ $SECC_CMDLINE == "1" ]] ; then
+  SECC_CMDLINE="true"
+else
+  SECC_CMDLINE="false"
+fi
 if [[ -n $DEBUG ]] ; then
   [[ -z $SECC_LOG ]] && SECC_LOG=/dev/stdout
 else
   SECC_LOG=/dev/null  
 fi
-[[ -z $TMPDIR ]] && TMPDIR="/tmp"
-
 
 COMPILER_PATH=$0
 ARGV=$(printf '%q ' "$@")  # preserve double quotes. ex, -DMMM=\"ABC\"
@@ -44,12 +59,25 @@ JOB_PATH=${PREPROCESSED_SOURCE_PATH}_job.txt
 OPTION_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_option_header.txt
 JOB_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_job_header.txt
 COMPILE_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_compile_header.txt
+CACHE_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_cache_header.txt
 CURL_LOG_FORMAT="[$$] code:%{http_code} type:%{content_type} upload:%{size_upload}/%{speed_upload} download:%{size_download}/%{speed_download} time:%{time_total} file:%{filename_effective}\n"
 
 log()
 {
   read -r INPUT
-  echo "[$$] $INPUT $1" >> ${SECC_LOG}
+
+  case "$1" in
+    "gray")    COLOR_PREFIX="\e[30m" ;;
+    "red")     COLOR_PREFIX="\e[31m" ;;
+    "green")   COLOR_PREFIX="\e[32m" ;;
+    "yellow")  COLOR_PREFIX="\e[33m" ;;
+    "blue")    COLOR_PREFIX="\e[34m" ;;
+    "magenta") COLOR_PREFIX="\e[35m" ;;
+    "cyan")    COLOR_PREFIX="\e[36m" ;;
+    *)         COLOR_PREFIX="\e[39m" ;; #default(white?)
+  esac
+
+  echo -e "[\e[93m$$\e[0m] ${COLOR_PREFIX}${INPUT}\e[0m" >> ${SECC_LOG}
 }
 
 deleteTempFiles()
@@ -62,11 +90,12 @@ deleteTempFiles()
   rm -rf ${OPTION_HEADER_PATH}       > /dev/null 2>&1
   rm -rf ${JOB_HEADER_PATH}          > /dev/null 2>&1
   rm -rf ${COMPILE_HEADER_PATH}      > /dev/null 2>&1
+  rm -rf ${CACHE_HEADER_PATH}        > /dev/null 2>&1
 }
 
 passThrough()
 {
-  echo "passThrough : $1" | log
+  echo "passThrough : $1" | log "red"
   deleteTempFiles
   eval "/usr/bin/${COMPILER} ${ARGV}"
   EXIT_CODE=$?
@@ -77,11 +106,11 @@ passThrough()
 printCommand()
 {
   export >> ${SECC_LOG}
-  echo "${COMPILER_PATH} ${ARGV}" >> ${SECC_LOG}
+  echo "${COMPILER_PATH} ${ARGV}" | log "magenta"
 }
 
 echo "--- SECC START --- "$(date) | log
-[[ "$SECC_CMDLINE" = true ]] && printCommand
+[[ "$SECC_CMDLINE" == "true" ]] && printCommand
 
 ## basic checks
 [[ -z "$1" ]] && passThrough "no arguments"
@@ -122,7 +151,7 @@ http://$SCHEDULER_HOST:$SCHEDULER_PORT/option/analyze \
 --noproxy ${SCHEDULER_HOST} \
 --write-out '${CURL_LOG_FORMAT}'"
 
-echo $COMMAND | log
+echo $COMMAND | log "green"
 eval $COMMAND 1>> ${SECC_LOG} 2> /dev/null
 [[ $? != 0 ]] && passThrough "error on SCHEDULER/option/analyze"
 HEADER=$(cat ${OPTION_HEADER_PATH} 2> /dev/null)
@@ -182,7 +211,7 @@ data='{
   },
   "mode" : "1",
   "projectId" : "'${OPTION_projectId}'",
-  "cachePrefered" : false,
+  "cachePrefered" : '${SECC_CACHE}',
   "crossPrefered" : '${SECC_CROSS}',
   "sourcePath" : "'${OPTION_infile}'",
   "sourceHash" : "'${SOURCE_HASH}'",
@@ -201,9 +230,9 @@ http://$SCHEDULER_HOST:$SCHEDULER_PORT/job/new \
 --noproxy ${SCHEDULER_HOST} \
 --write-out '${CURL_LOG_FORMAT}'"
 
-echo $COMMAND | log
+echo $COMMAND | log "green"
 eval $COMMAND 1>> ${SECC_LOG} 2> /dev/null
-
+[[ $? != 0 ]] && passThrough "error on SCHEDULER/job/new curl"
 HEADER=$(cat ${JOB_HEADER_PATH} 2> /dev/null)
 [[ $? != 0 ]] && passThrough "error on SCHEDULER/job/new header"     # No such file or directory
 OUTPUT_HEADER_STATUS=$(echo "$HEADER" | grep "HTTP/1.1 200 OK")
@@ -218,6 +247,7 @@ JOB_jobId=$(echo "$JOB" | grep "jobId=" | awk -F"jobId=" '{print $2}')
 JOB_daemonAddress=$(echo "$JOB" | grep "daemon/daemonAddress=" | awk -F"daemon/daemonAddress=" '{print $2}')
 JOB_daemonPort=$(echo "$JOB" | grep "daemon/system/port=" | awk -F"daemon/system/port=" '{print $2}')
 JOB_local=$(echo "$JOB" | grep "local=" | awk -F"local=" '{print $2}')
+JOB_cache=$(echo "$JOB" | grep "cache=" | awk -F"cache=" '{print $2}')
 JOB_errorMessage=$(echo "$JOB" | grep "error/message=" | awk -F"error/message=" '{print $2}')
 
 [[ "$JOB_local" == "true" ]] && passThrough "local from SCHEDULER/job/new" "${JOB_errorMessage}"
@@ -227,6 +257,62 @@ JOB_errorMessage=$(echo "$JOB" | grep "error/message=" | awk -F"error/message=" 
 # echo $JOB_jobId
 # echo $JOB_daemonAddress
 # echo $JOB_daemonPort
+
+# try Cache if possible #oooOOooops. need to do refactoring.
+if [[ "$SECC_CACHE" == "true" && "$JOB_cache" == "true" ]]; then
+  CACHE_URL="http://${JOB_daemonAddress}:${JOB_daemonPort}/cache/${JOB_archiveId}/${SOURCE_HASH}/${OPTION_argvHash}"
+  echo "cache is available. try URL : ${CACHE_URL}" | log "cyan"
+  COMMAND="curl \
+  -X GET \
+  --max-time 10 \
+  --compressed \
+  -o '${OUTPUT_TAR_PATH}' \
+  --dump-header '${CACHE_HEADER_PATH}' \
+  ${CACHE_URL} \
+  --noproxy ${SCHEDULER_HOST} \
+  --write-out '${CURL_LOG_FORMAT}'"
+
+  echo $COMMAND | log "blue"
+  eval $COMMAND 1>> ${SECC_LOG} 2> /dev/null
+
+  if [[ $? == 0 ]]; then
+    HEADER=$(cat ${CACHE_HEADER_PATH} 2> /dev/null)
+    if [[ $? == 0 ]]; then
+      CACHE_HEADER_SECC_CODE=$(echo "$CACHE_HEADER" | grep "secc-code:" | sed -e "s/secc-code://")
+      CACHE_HEADER_SECC_STDOUT=$(echo "$CACHE_HEADER" | grep "secc-stdout:" | sed -e "s/secc-stdout://")
+      CACHE_HEADER_SECC_STDERR=$(echo "$CACHE_HEADER" | grep "secc-stderr:" | sed -e "s/secc-stderr://")
+      CACHE_HEADER_STATUS=$(echo "$HEADER" | grep "HTTP/1.1 200 OK")
+      if [[ -n "$CACHE_HEADER_STATUS" && "$CACHE_HEADER_SECC_CODE" != "0" ]]; then
+        [[ -n "${CACHE_HEADER_SECC_STDOUT}" ]] && printf '%b' "${CACHE_HEADER_SECC_STDOUT//%/\\x}" > /dev/stdout
+        [[ -n "${CACHE_HEADER_SECC_STDERR}" ]] && printf '%b' "${CACHE_HEADER_SECC_STDERR//%/\\x}" > /dev/stderr
+
+        # target directory
+        [[ -n "$OPTION_outfile" ]] && OUTPUT_DIR=$(dirname $OPTION_outfile)
+        [[ -z "$OUTPUT_DIR" ]] && OUTPUT_DIR=${PWD}
+
+        # untar
+        COMMAND="tar xvf ${OUTPUT_TAR_PATH} --directory ${OUTPUT_DIR} 1>>${SECC_LOG} 2>&1"
+        echo $COMMAND | log "blue"
+        eval $COMMAND
+        if [[ $? == 0 ]]; then
+          # clean up
+          deleteTempFiles
+
+          echo "--- SECC END ---" | log
+          exit 0
+        else
+          echo "error on cache untar" | log
+        fi
+      else
+        echo "error on DAEMON/cache/${JOB_archiveId}/${SOURCE_HASH}/${OPTION_argvHash} bad request" | log
+      fi
+    else
+      echo "error on DAEMON/cache/${JOB_archiveId}/${SOURCE_HASH}/${OPTION_argvHash} header" | log
+    fi
+  else
+    echo "error on DAEMON/cache/${JOB_archiveId}/${SOURCE_HASH}/${OPTION_argvHash} curl" | log
+  fi
+fi
 
 # OPTION_remoteArgv to comma seperated string
 for arg in ${OPTION_remoteArgv[@]}
@@ -264,7 +350,7 @@ http://${JOB_daemonAddress}:${JOB_daemonPort}/compile/preprocessed/${JOB_archive
 --noproxy ${SCHEDULER_HOST} \
 --write-out '${CURL_LOG_FORMAT}'"
 
-echo $COMMAND | log
+echo $COMMAND | log "green"
 eval $COMMAND 1>> ${SECC_LOG} 2> /dev/null
 [[ $? != 0 ]] && passThrough "error on DAEMON/compile/preprocessed/${JOB_archiveId}"
 
@@ -288,7 +374,7 @@ OUTPUT_HEADER_STATUS=$(echo "$OUTPUT_HEADER" | grep "HTTP/1.1 200 OK")
 
 # untar
 COMMAND="tar xvf ${OUTPUT_TAR_PATH} --directory ${OUTPUT_DIR} 1>>${SECC_LOG} 2>&1"
-echo $COMMAND | log
+echo $COMMAND | log "green"
 eval $COMMAND
 [[ $? != 0 ]] && passThrough "error on untar"
 
