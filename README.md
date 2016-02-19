@@ -9,12 +9,12 @@ a project of 'Second Compiler'.
 ```sh
 git clone https://github.com/ivere27/secc-shell.git
 ```
-edit SCHEDULER_HOST, SCHEDULER_PORT of secc.sh
+edit SECC_ADDRESS, SECC_PORT of secc.sh
 ```sh
 vi secc-shell/secc.sh
 
-#SCHEDULER_HOST="172.17.42.1"
-#SCHEDULER_PORT="10509"
+#SECC_ADDRESS="172.17.42.1"
+#SECC_PORT="10509"
 ```
 then, (or export PATH=/path/to/secc-shell/bin:$PATH)
 ```sh
