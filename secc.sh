@@ -1,13 +1,16 @@
 #!/bin/bash
 ############################################################
 ##                                                        ##
-##                SECC Shell Frontend - 0.0.5             ##
+##                SECC Shell Frontend - 0.0.6             ##
 ##                                                        ##
+## bin utils                                              ##
+##  printf, echo, date, curl, cat, grep, sed, awk         ##
+##  uname, md5|md5sum                                     ##
 ############################################################
 
 # ### user settings or ENV.
-# SCHEDULER_HOST="172.17.42.1"
-# SCHEDULER_PORT="10509"
+# SECC_ADDRESS="172.17.42.1"
+# SECC_PORT="10509"
 
 # # debug
 # DEBUG="*"
@@ -20,10 +23,11 @@
 # #SECC_MODE="1"      # FIXME : need to implement MODE 2
 
 #default settings
-[[ -z $SECC_CROSS ]] && SECC_CROSS="0"  # default CROSS = FALSE
-[[ -z $SECC_CACHE ]] && SECC_CACHE="1"  # default CACHE = TRUE
-[[ -z $SECC_MODE ]] && SECC_MODE="1"    # default MODE  = 1 preprocessed
+[[ -z $SECC_CROSS ]] && SECC_CROSS="0"   # default CROSS = FALSE
+[[ -z $SECC_CACHE ]] && SECC_CACHE="1"   # default CACHE = TRUE
+[[ -z $SECC_MODE ]] && SECC_MODE="1"     # default MODE  = 1 preprocessed
 [[ -z $TMPDIR ]] && TMPDIR="/tmp"
+[[ -z $SECC_PORT ]] && SECC_PORT="10509" # default PORT = 10509
 
 if [[ $SECC_CROSS == "1" ]] ; then
   SECC_CROSS="true"
@@ -66,6 +70,7 @@ log()
 {
   read -r INPUT
 
+  # FIXME : only works under Linux
   case "$1" in
     "gray")    COLOR_PREFIX="\e[30m" ;;
     "red")     COLOR_PREFIX="\e[31m" ;;
@@ -114,8 +119,7 @@ echo "--- SECC START --- "$(date) | log
 
 ## basic checks
 [[ -z "$1" ]] && passThrough "no arguments"
-[[ -z "$SCHEDULER_HOST" ]] && passThrough "no SCHEDULER_HOST"
-[[ -z "$SCHEDULER_PORT" ]] && passThrough "no SCHEDULER_PORT"
+[[ -z "$SECC_ADDRESS" ]] && passThrough "no SECC_ADDRESS"
 [[ $PWD == *"/CMakeFiles/"* ]] && passThrough "in CMakeFiles"   # //always passThrough in CMakeFiles 
 
 OPTION_C_EXISTS="0"
@@ -144,11 +148,11 @@ COMMAND="curl \
 -X POST \
 -H 'Content-Type: application/json' \
 -H 'Accept: text/plain' \
-http://$SCHEDULER_HOST:$SCHEDULER_PORT/option/analyze \
+http://$SECC_ADDRESS:$SECC_PORT/option/analyze \
 -d '${data}' \
 -o '${OPTION_ANALYZE_PATH}' \
 --dump-header '${OPTION_HEADER_PATH}' \
---noproxy ${SCHEDULER_HOST} \
+--noproxy ${SECC_ADDRESS} \
 --write-out '${CURL_LOG_FORMAT}'"
 
 echo $COMMAND | log "green"
@@ -223,11 +227,11 @@ COMMAND="curl \
 -X POST \
 -H 'Content-Type: application/json' \
 -H 'Accept: text/plain' \
-http://$SCHEDULER_HOST:$SCHEDULER_PORT/job/new \
+http://$SECC_ADDRESS:$SECC_PORT/job/new \
 -d '$data' \
 -o '${JOB_PATH}' \
 --dump-header '${JOB_HEADER_PATH}' \
---noproxy ${SCHEDULER_HOST} \
+--noproxy ${SECC_ADDRESS} \
 --write-out '${CURL_LOG_FORMAT}'"
 
 echo $COMMAND | log "green"
@@ -269,7 +273,7 @@ if [[ "$SECC_CACHE" == "true" && "$JOB_cache" == "true" ]]; then
   -o '${OUTPUT_TAR_PATH}' \
   --dump-header '${CACHE_HEADER_PATH}' \
   ${CACHE_URL} \
-  --noproxy ${SCHEDULER_HOST} \
+  --noproxy ${SECC_ADDRESS} \
   --write-out '${CURL_LOG_FORMAT}'"
 
   echo $COMMAND | log "blue"
@@ -347,7 +351,7 @@ COMMAND="curl \
 -o '${OUTPUT_TAR_PATH}' \
 --dump-header '${COMPILE_HEADER_PATH}' \
 http://${JOB_daemonAddress}:${JOB_daemonPort}/compile/preprocessed/${JOB_archiveId} \
---noproxy ${SCHEDULER_HOST} \
+--noproxy ${SECC_ADDRESS} \
 --write-out '${CURL_LOG_FORMAT}'"
 
 echo $COMMAND | log "green"
