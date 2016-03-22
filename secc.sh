@@ -57,7 +57,7 @@ RANDOM=$$                  # seed from PID
 RANDOM_STRING=$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM
 PREPROCESSED_SOURCE_PATH="${TMPDIR}/secc-${RANDOM_STRING:0:5}"
 PREPROCESSED_GZIP_PATH=${PREPROCESSED_SOURCE_PATH}_in.gz
-OUTPUT_TAR_PATH=${PREPROCESSED_SOURCE_PATH}_out.tar
+OUTPUT_TAR_PATH=${PREPROCESSED_SOURCE_PATH}_out.tar.gz
 OPTION_ANALYZE_PATH=${PREPROCESSED_SOURCE_PATH}_option.txt
 JOB_PATH=${PREPROCESSED_SOURCE_PATH}_job.txt
 OPTION_HEADER_PATH=${PREPROCESSED_SOURCE_PATH}_option_header.txt
@@ -295,7 +295,7 @@ if [[ "$SECC_CACHE" == "true" && "$JOB_cache" == "true" ]]; then
         [[ -z "$OUTPUT_DIR" ]] && OUTPUT_DIR=${PWD}
 
         # untar
-        COMMAND="tar xvf ${OUTPUT_TAR_PATH} --directory ${OUTPUT_DIR} 1>>${SECC_LOG} 2>&1"
+        COMMAND="tar xvfz ${OUTPUT_TAR_PATH} --directory ${OUTPUT_DIR} 1>>${SECC_LOG} 2>&1"
         echo $COMMAND | log "blue"
         eval $COMMAND
         if [[ $? == 0 ]]; then
@@ -377,7 +377,7 @@ OUTPUT_HEADER_STATUS=$(echo "$OUTPUT_HEADER" | grep "HTTP/1.1 200 OK")
 [[ -z "$OUTPUT_DIR" ]] && OUTPUT_DIR=${PWD}
 
 # untar
-COMMAND="tar xvf ${OUTPUT_TAR_PATH} --directory ${OUTPUT_DIR} 1>>${SECC_LOG} 2>&1"
+COMMAND="tar xvfz ${OUTPUT_TAR_PATH} --directory ${OUTPUT_DIR} 1>>${SECC_LOG} 2>&1"
 echo $COMMAND | log "green"
 eval $COMMAND
 [[ $? != 0 ]] && passThrough "error on untar"
