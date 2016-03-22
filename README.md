@@ -21,3 +21,17 @@ then, (or export PATH=/path/to/secc-shell/bin:$PATH)
 # (optional) DEBUG=* SECC_LOG=secc.log \
 /path/to/secc-shell/bin/clang -c test.c
 ```
+
+## CC/CXX example
+```sh
+NUMBER_OF_PROCESSORS=16 SECC_ADDRESS=172.17.42.1 SECC_CACHE=0 \
+CC=/path/to/secc-shell/bin/gcc CXX=/path/to/secc-shell/bin/g++ ./build-webkit --gtk --release
+```
+
+## Test purposes
+```sh
+DEBUG=* SECC_ADDRESS=172.17.42.1 SECC_MODE=1 SECC_CACHE=0 /path/to/secc-shell/bin/gcc -c test.c
+```
+
+# License
+MIT
