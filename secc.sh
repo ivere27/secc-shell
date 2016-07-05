@@ -1,7 +1,7 @@
 #!/bin/bash
 ############################################################
 ##                                                        ##
-##                SECC Shell Frontend - 0.0.6             ##
+##                SECC Shell Frontend - 0.0.7             ##
 ##                                                        ##
 ## bin utils                                              ##
 ##  printf, echo, date, curl, cat, grep, sed, awk         ##
@@ -47,14 +47,15 @@ fi
 if [[ -n $DEBUG ]] ; then
   [[ -z $SECC_LOG ]] && SECC_LOG=/dev/stdout
 else
-  SECC_LOG=/dev/null  
+  SECC_LOG=/dev/null
 fi
 
-COMPILER_PATH=$0
+DRIVER_PATH=$0
 ARGV=$(printf '%q ' "$@")  # preserve double quotes. ex, -DMMM=\"ABC\"
-COMPILER=${COMPILER_PATH##*/}
+DRIVER=${DRIVER_PATH##*/}
 RANDOM=$$                  # seed from PID
 RANDOM_STRING=$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM
+
 PREPROCESSED_SOURCE_PATH="${TMPDIR}/secc-${RANDOM_STRING:0:5}"
 PREPROCESSED_GZIP_PATH=${PREPROCESSED_SOURCE_PATH}_in.gz
 OUTPUT_TAR_PATH=${PREPROCESSED_SOURCE_PATH}_out.tar.gz
@@ -102,7 +103,7 @@ passThrough()
 {
   echo "passThrough : $1" | log "red"
   deleteTempFiles
-  eval "/usr/bin/${COMPILER} ${ARGV}"
+  eval "/usr/bin/${DRIVER} ${ARGV}"
   EXIT_CODE=$?
   exit ${EXIT_CODE}
 }
@@ -111,7 +112,7 @@ passThrough()
 printCommand()
 {
   export >> ${SECC_LOG}
-  echo "${COMPILER_PATH} ${ARGV}" | log "magenta"
+  echo "${DRIVER_PATH} ${ARGV}" | log "magenta"
 }
 
 echo "--- SECC START --- "$(date) | log
@@ -136,7 +137,7 @@ argv+=']'
 [[ $OPTION_C_EXISTS == "0" ]] && passThrough "-c not exists"
 
 
-data='{"compiler":"'${COMPILER}'"
+data='{"driver":"'${DRIVER}'"
 ,"cwd":"'${PWD}'"
 ,"mode":"'${SECC_MODE}'"
 ,"argv":'${argv}'}'
@@ -180,12 +181,11 @@ OPTION_target=$(echo "$OPTION" | grep "target=" | sed -e "s/target=//")
 
 [[ "$OPTION_useLocal" == "true" ]] && passThrough "useLocal from SCHEDULER/option/analyze"
 
-COMPILER_VERSION=$(echo $(/usr/bin/${COMPILER} --version))
-COMPILER_DUMPMACHINE=$(/usr/bin/${COMPILER} -dumpmachine)
-COMPILER_DUMPVERSION=$(/usr/bin/${COMPILER} -dumpversion)
+COMPILER_VERSION=$(echo $(/usr/bin/${DRIVER} --version))
+COMPILER_DUMPMACHINE=$(/usr/bin/${DRIVER} -dumpmachine)
 
 # generator preprocessed source
-COMMAND="/usr/bin/${COMPILER} ${OPTION_localArgv[@]} -o ${PREPROCESSED_SOURCE_PATH}"
+COMMAND="/usr/bin/${DRIVER} ${OPTION_localArgv[@]} -o ${PREPROCESSED_SOURCE_PATH}"
 PREPROCESSED=$(eval $COMMAND)
 [[ $? != 0 ]] && passThrough "error on generating the preprocessed source"
 # md5
@@ -210,7 +210,6 @@ data='{
   },
   "compilerInformation" : {
     "version" : "'${COMPILER_VERSION}'",
-    "dumpversion" : "'${COMPILER_DUMPVERSION}'",
     "dumpmachine" : "'${COMPILER_DUMPMACHINE}'"
   },
   "mode" : "1",
@@ -249,7 +248,7 @@ JOB=$(cat ${JOB_PATH})
 JOB_archiveId=$(echo "$JOB" | grep "archive/archiveId=" | awk -F"archive/archiveId=" '{print $2}')
 JOB_jobId=$(echo "$JOB" | grep "jobId=" | awk -F"jobId=" '{print $2}')
 JOB_daemonAddress=$(echo "$JOB" | grep "daemon/daemonAddress=" | awk -F"daemon/daemonAddress=" '{print $2}')
-JOB_daemonPort=$(echo "$JOB" | grep "daemon/system/port=" | awk -F"daemon/system/port=" '{print $2}')
+JOB_daemonPort=$(echo "$JOB" | grep "daemon/daemonPort=" | awk -F"daemon/daemonPort=" '{print $2}')
 JOB_local=$(echo "$JOB" | grep "local=" | awk -F"local=" '{print $2}')
 JOB_cache=$(echo "$JOB" | grep "cache=" | awk -F"cache=" '{print $2}')
 JOB_errorMessage=$(echo "$JOB" | grep "error/message=" | awk -F"error/message=" '{print $2}')
@@ -341,7 +340,7 @@ COMMAND="curl \
 --compressed \
 -H Content-Encoding:'gzip' \
 -H secc-jobid:'${JOB_jobId}' \
--H secc-compiler:'${COMPILER}' \
+-H secc-driver:'${DRIVER}' \
 -H secc-language:'${OPTION_language}' \
 -H secc-argv:['$SECC_ARGV'] \
 -H secc-filename:'${SOURCE_NAME}' \
